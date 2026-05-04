@@ -32,14 +32,12 @@ const STORAGE_KEY = '@water_tracker_data';
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 const GOAL = 4000;
 
-// GLOBAL NOTIFICATION HANDLER (Must be outside the component)
+// Configure how notifications appear when the app is foregrounded
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
   }),
 });
 
@@ -48,14 +46,15 @@ export default function App() {
   const [water, setWater] = useState(0);
   const [history, setHistory] = useState<{ id: number, date: number, time: string, amount: number }[]>([]);
   
+  // Animation Shared Values
   const level = useSharedValue(0);
   const waveHorizontal = useSharedValue(0);
 
-  // --- APP INITIALIZATION ---
+  // --- 1. INITIALIZATION LOGIC (Splash Screen Logic) ---
   useEffect(() => {
     async function initialize() {
       try {
-        // Register for notifications
+        // Request Notifications & Get Token
         await registerForPushNotificationsAsync();
 
         // Load Persisted Data
@@ -73,7 +72,8 @@ export default function App() {
           setHistory(filteredHistory);
           level.value = savedWater / GOAL;
         }
-        // Give the splash screen time to shine
+
+        // Artificial delay for splash screen aesthetics
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (e) {
         console.error(e);
@@ -84,14 +84,14 @@ export default function App() {
     initialize();
   }, []);
 
-  // --- PERSISTENCE ---
+  // --- 2. PERSISTENCE SYNC ---
   useEffect(() => {
     if (isReady) {
       AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ savedWater: water, savedHistory: history }));
     }
   }, [water, history]);
 
-  // --- ANIMATIONS ---
+  // --- 3. WAVE ANIMATION LOOP ---
   useEffect(() => {
     waveHorizontal.value = withRepeat(
       withTiming(1, { duration: 7000, easing: Easing.linear }),
@@ -100,21 +100,7 @@ export default function App() {
     );
   }, []);
 
-  const animatedWaveProps = useAnimatedProps(() => {
-    const move = waveHorizontal.value * width;
-    const currentY = height * (1 - level.value);
-    const amplitude = level.value > 0 ? 15 : 0;
-    return {
-      d: `M ${-move} ${currentY} 
-          Q ${-move + width * 0.25} ${currentY - amplitude}, ${-move + width * 0.5} ${currentY} 
-          T ${-move + width} ${currentY} 
-          Q ${-move + width * 1.25} ${currentY - amplitude}, ${-move + width * 1.5} ${currentY} 
-          T ${-move + width * 2} ${currentY} 
-          V ${height} H ${-move} Z`,
-    };
-  });
-
-  // --- HELPERS ---
+  // --- 4. NOTIFICATION PERMISSIONS ---
   async function registerForPushNotificationsAsync() {
     if (!Device.isDevice) return;
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -127,10 +113,11 @@ export default function App() {
 
     const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
     const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-    console.log("FCM Token:", token);
+    console.log("FCM/Expo Token:", token);
     return token;
   }
 
+  // --- 5. INTERACTION LOGIC ---
   const addWater = (amount: number) => {
     const newWater = Math.min(water + amount, GOAL);
     setWater(newWater);
@@ -148,13 +135,29 @@ export default function App() {
 
   const reset = async () => {
     setWater(0);
-    level.value = withTiming(0);
+    level.value = withTiming(0, { duration: 800 });
     setHistory([]);
     await AsyncStorage.removeItem(STORAGE_KEY);
   };
 
-  // --- RENDERING ---
+  // --- 6. ANIMATED PROPS ---
+  const animatedWaveProps = useAnimatedProps(() => {
+    const move = waveHorizontal.value * width;
+    const currentY = height * (1 - level.value);
+    const amplitude = level.value > 0 ? 15 : 0;
+    return {
+      d: `M ${-move} ${currentY} 
+          Q ${-move + width * 0.25} ${currentY - amplitude}, ${-move + width * 0.5} ${currentY} 
+          T ${-move + width} ${currentY} 
+          Q ${-move + width * 1.25} ${currentY - amplitude}, ${-move + width * 1.5} ${currentY} 
+          T ${-move + width * 2} ${currentY} 
+          V ${height} H ${-move} Z`,
+    };
+  });
 
+  // --- 7. RENDERING ---
+
+  // SPLASH SCREEN UI
   if (!isReady) {
     return (
       <View style={styles.splashContainer}>
@@ -171,10 +174,12 @@ export default function App() {
     );
   }
 
+  // MAIN HOME SCREEN UI
   return (
     <Animated.View entering={FadeIn} style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
+      {/* Dynamic Water Background */}
       <View style={styles.waterContainer}>
         <Svg width={width} height={height}>
           <Defs>
@@ -193,11 +198,12 @@ export default function App() {
           <Text style={styles.headerSub}>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short' })}</Text>
         </View>
 
+        {/* Main Stats Card */}
         <View style={styles.mainCard}>
           <View style={styles.statsRow}>
             <View>
               <Text style={styles.amountText}>{water}<Text style={styles.unitText}>ml</Text></Text>
-              <Text style={styles.goalText}>Target: {GOAL}ml</Text>
+              <Text style={styles.goalText}>Goal: {GOAL}ml</Text>
             </View>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{Math.round((water / GOAL) * 100)}%</Text>
@@ -212,16 +218,17 @@ export default function App() {
           </View>
         </View>
 
+        {/* History Section */}
         <View style={styles.historyBox}>
           <View style={styles.sectionHeader}>
             <Text style={styles.historyTitle}>History</Text>
-            <Text style={styles.remainingText}>{GOAL - water > 0 ? `${GOAL - water}ml left` : 'Daily Goal Met! 🎉'}</Text>
+            <Text style={styles.remainingText}>{GOAL - water > 0 ? `${GOAL - water}ml remaining` : 'Daily Goal Met! 🎉'}</Text>
           </View>
           
           {history.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Feather name="droplet" size={16} color="#74777F" />
-              <Text style={styles.emptyText}>No recent logs</Text>
+              <Text style={styles.emptyText}>No recent activity</Text>
             </View>
           ) : (
             history.map((item) => (
@@ -239,6 +246,7 @@ export default function App() {
         </View>
       </ScrollView>
 
+      {/* Slim Footer */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.tabActive}>
           <View style={styles.indicatorActive}>
@@ -255,6 +263,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFF' },
+  // Splash Styles
   splashContainer: { flex: 1, backgroundColor: '#F8FAFF', justifyContent: 'center', alignItems: 'center' },
   splashContent: { alignItems: 'center' },
   splashIconContainer: { 
@@ -264,6 +273,7 @@ const styles = StyleSheet.create({
   },
   splashTitle: { fontSize: 32, fontWeight: '800', color: '#1A1C1E', letterSpacing: -1 },
   splashSubtitle: { fontSize: 18, color: '#74777F', fontWeight: '500', marginTop: -4 },
+  // Home Styles
   waterContainer: { position: 'absolute', width: '100%', height: '100%' },
   scrollContent: { paddingBottom: 100 },
   header: { paddingTop: 60, paddingHorizontal: 28, marginBottom: 24 },

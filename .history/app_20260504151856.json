@@ -8,9 +8,10 @@
     "scheme": "watertrackerapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
     "android": {
-      "package": "com.akshad.watertrackerapp",
-      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,19 +38,11 @@
             "backgroundColor": "#000000"
           }
         }
-      ],
-      "expo-notifications"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "5cfdcee5-31e9-4115-b4ed-a6fd0102f471"
-      }
-    },
-    "owner": "akshad1204"
+    }
   }
 }

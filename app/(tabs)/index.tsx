@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import { SchedulableTriggerInputTypes } from 'expo-notifications'; // Essential for fixing the TS error
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -33,6 +34,7 @@ const STORAGE_KEY = '@water_tracker_data';
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 const GOAL = 4000;
 
+// Prevent native splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
 Notifications.setNotificationHandler({
@@ -45,7 +47,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// --- WATER DROP LOADER COMPONENT ---
+// --- SUB-COMPONENT: WATER DROP LOADER ---
 function WaterLoader() {
   const fillProgress = useSharedValue(0);
 
@@ -54,7 +56,6 @@ function WaterLoader() {
   }, []);
 
   const fillStyle = useAnimatedStyle(() => ({
-    // Moves the water from bottom (80px) to top (0px)
     transform: [{ translateY: 80 - (fillProgress.value * 80) }],
   }));
 
@@ -62,7 +63,6 @@ function WaterLoader() {
     <View style={styles.loaderWrapper}>
       <View style={styles.dropContainer}>
         <View style={styles.dropShape}>
-          {/* Counter-rotate the inner view to keep water vertical */}
           <View style={styles.verticalWaterWrapper}>
             <Animated.View style={[styles.actualWater, fillStyle]} />
           </View>
@@ -73,6 +73,7 @@ function WaterLoader() {
   );
 }
 
+// --- MAIN APP COMPONENT ---
 export default function App() {
   const [isReady, setIsReady] = useState(false);
   const [water, setWater] = useState(0);
@@ -87,7 +88,8 @@ export default function App() {
         await Promise.all([
           registerForPushNotificationsAsync(),
           loadData(),
-          new Promise(resolve => setTimeout(resolve, 2600)) // Let animation finish
+          setupRecurringNotifications(), // Initializes the 3-hour timer
+          new Promise(resolve => setTimeout(resolve, 2600))
         ]);
       } catch (e) {
         console.error(e);
@@ -108,6 +110,29 @@ export default function App() {
       setHistory(filteredHistory);
       level.value = savedWater / GOAL;
     }
+  };
+
+  // --- RECURRING NOTIFICATION LOGIC ---
+  const setupRecurringNotifications = async () => {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return;
+
+    // Clear existing to avoid duplicate alerts
+    await Notifications.cancelAllScheduledNotificationsAsync();
+
+    // Schedule for 3 hours (10800 seconds)
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Stay Hydrated! 💧",
+        body: "It's been 3 hours since your last check. Time for some water?",
+        sound: true,
+      },
+      trigger: {
+        type: SchedulableTriggerInputTypes.TIME_INTERVAL, // Fixed TS error
+        seconds: 10800, 
+        repeats: true,
+      },
+    });
   };
 
   const onLayoutRootView = useCallback(async () => {
@@ -153,6 +178,16 @@ export default function App() {
       finalStatus = status;
     }
     if (finalStatus !== 'granted') return;
+
+    if (Device.osName === 'Android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#0061A4',
+      });
+    }
+
     const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
     return (await Notifications.getExpoPushTokenAsync({ projectId })).data;
   }
@@ -163,6 +198,9 @@ export default function App() {
     level.value = withSpring(newWater / GOAL, { damping: 15, stiffness: 60 });
     const now = new Date();
     setHistory([{ id: Date.now(), date: Date.now(), time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), amount }, ...history]);
+    
+    // Reset the 3-hour timer whenever they log water
+    setupRecurringNotifications();
   };
 
   const reset = async () => {
@@ -170,6 +208,7 @@ export default function App() {
     level.value = withTiming(0);
     setHistory([]);
     await AsyncStorage.removeItem(STORAGE_KEY);
+    await Notifications.cancelAllScheduledNotificationsAsync();
   };
 
   if (!isReady) return <WaterLoader />;

@@ -10,10 +10,9 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        {/* 2. Change name from "(tabs)" to "index" */}
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+      <Stack screenOptions={{ headerShown: false }}> 
+        {/* 'headerShown: false' here hides it for EVERY screen */}
+        <Stack.Screen name="index" options={{ title: 'Hydration Tracker' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
